@@ -1,148 +1,119 @@
-# Arquitetura — API CRUD Todo
+# Arquitetura — Lembrete de Todo
 
-## Visão geral
+## Visão Geral
 
-API REST simples para gerenciamento de tarefas (todos) com operações CRUD completas.
-Persistência em memória (sem banco de dados externo). Sem frontend.
+Adicionar um campo opcional `reminder` (data/hora ISO 8601) ao modelo `Todo` existente, propagando-o por todas as camadas da aplicação: model → repository → service → controller → routes. A persistência continua em memória (Map), conforme o design atual.
 
-## Componentes
+## Componentes Afetados
+
+| Camada | Arquivo | Mudança |
+|---|---|---|
+| Model | `back-end/src/models/todo.model.ts` | Adicionar `reminder: string \| null` a `Todo`, `CreateTodoInput` e `UpdateTodoInput` |
+| Repository | `back-end/src/repositories/todo.repository.ts` | Nenhuma — o repositório já é genérico (salva/atualiza o objeto `Todo` inteiro) |
+| Service | `back-end/src/services/todo.service.ts` | Propagar `reminder` em `create()` e `update()` |
+| Controller | `back-end/src/controllers/todo.controller.ts` | Validar `reminder`: se presente, deve ser `null` ou string ISO 8601 válida; rejeitar com 400 caso contrário |
+| Routes | `back-end/src/routes/todo.routes.ts` | Nenhuma mudança — os endpoints já existem |
+| Testes | `back-end/tests/**` | Adicionar cenários para reminder em cada nível |
+
+## Fluxo Principal
 
 ```
-back-end/
-├── src/
-│   ├── app.ts              # Configura Express, middlewares e rotas
-│   ├── server.ts           # Ponto de entrada — escuta na PORT
-│   ├── routes/
-│   │   └── todo.routes.ts  # Define rotas /todos e delega ao controller
-│   ├── controllers/
-│   │   └── todo.controller.ts  # Recebe req/res, valida entrada, chama o service
-│   ├── services/
-│   │   └── todo.service.ts     # Lógica de negócio (CRUD sobre o repository)
-│   ├── repositories/
-│   │   └── todo.repository.ts  # Armazena todos em Map<string, Todo> (memória)
-│   ├── models/
-│   │   └── todo.model.ts       # Interface Todo e tipos auxiliares
-│   └── errors/
-│       └── not-found.error.ts  # Erro customizado para 404
-├── tests/
-│   ├── unit/
-│   │   ├── todo.service.spec.ts      # Testes unitários do service
-│   │   └── todo.repository.spec.ts   # Testes unitários do repository
-│   └── integration/
-│       └── todo.routes.spec.ts       # Testes de integração (supertest)
-├── package.json
-├── tsconfig.json
-└── jest.config.ts
+Cliente → POST /todos { title, reminder? }
+       → Controller.create(): valida title, valida reminder (ISO 8601 ou ausente)
+       → Service.create(): monta Todo com reminder (ou null)
+       → Repository.save(): grava no Map
+       → Resposta 201 { id, title, completed, reminder, createdAt, updatedAt }
 ```
 
-## Camadas
+```
+Cliente → PUT /todos/:id { reminder: "2026-10-10T14:30:00Z" }
+       → Controller.update(): valida reminder (ISO 8601, null, ou ausente)
+       → Service.update(): aplica reminder ao todo existente
+       → Repository.update(): grava no Map
+       → Resposta 200 { id, title, completed, reminder, createdAt, updatedAt }
+```
 
-1. **Routes** — mapeia verbos HTTP para métodos do controller.
-2. **Controller** — valida entrada (title obrigatório), formata resposta e status codes.
-3. **Service** — orquestra a lógica de negócio (criar, listar, buscar, atualizar, excluir).
-4. **Repository** — acesso ao armazenamento em memória (`Map<string, Todo>`).
-5. **Model** — define a interface `Todo` com `id`, `title`, `completed`, `createdAt`, `updatedAt`.
+## Validação de `reminder`
 
-## Fluxo principal (criar tarefa)
+- **Ausente / `undefined`**: campo não é alterado (em update) ou fica `null` (em create).
+- **`null`**: remove o lembrete (campo fica `null`).
+- **String ISO 8601 válida**: armazenada como recebida. Validação via `new Date(value)` — se resultar em `Invalid Date` ou `isNaN`, retorna 400.
+- **Qualquer outro tipo**: retorna 400.
+- Datas no passado são aceitas (AC-8).
 
-1. `POST /todos` → `todo.routes.ts` → `todo.controller.ts.create()`
-2. Controller valida que `title` é string não vazia; se inválido, retorna 400.
-3. Controller chama `todoService.create(title)`.
-4. Service gera UUID v4, monta o objeto `Todo` com `completed: false` e timestamps, salva via repository.
-5. Repository insere no `Map` e retorna o objeto.
-6. Controller responde 201 com o JSON da tarefa.
+## Mapeamento de Critérios de Aceitação
 
-## Mapeamento AC → Componentes
+| AC | Componente(s) |
+|---|---|
+| AC-1 | Controller.create + Service.create + Model |
+| AC-2 | Controller.create + Service.create (default `null`) |
+| AC-3 | Controller.update + Service.update |
+| AC-4 | Controller.update + Service.update (aceitar `null`) |
+| AC-5 | Controller.findById (já devolve o objeto inteiro) |
+| AC-6 | Controller.listAll (já devolve o array inteiro) |
+| AC-7 | Controller.create + Controller.update (validação) |
+| AC-8 | Controller (não rejeitar datas passadas) |
+| AC-9 | Repository (in-memory Map — limitação documentada) |
 
-| AC | Componentes |
-|----|-------------|
-| AC-1 | controller (status 201), service (criação), repository (persistência), model (shape) |
-| AC-2 | controller (validação de title) |
-| AC-3 | controller + service + repository (listAll) |
-| AC-4 | controller + service + repository (findById) |
-| AC-5 | controller (404 quando não encontrado) |
-| AC-6 | controller + service + repository (update, updatedAt) |
-| AC-7 | controller (404 quando não encontrado) |
-| AC-8 | controller + service + repository (delete, 204) |
-| AC-9 | controller (404 quando não encontrado) |
-| AC-10 | app.ts (express.json middleware, Content-Type) |
-| AC-11 | tests/ (unit + integration) |
-| AC-12 | tsconfig.json (compilação sem erros) |
-| AC-13 | jest.config.ts + package.json scripts |
-
-## Front-end
-
-**None: no front-end changes.** Os requisitos pedem apenas a API; frontend está explicitamente fora de escopo.
-
-## Plano de implementação
+## Plano de Implementação
 
 ### Backend (`back-end/`)
 
-Ordem sugerida:
+1. **Model** (`src/models/todo.model.ts`):
+   - Adicionar `reminder: string | null` à interface `Todo`.
+   - Adicionar `reminder?: string | null` a `CreateTodoInput` e `UpdateTodoInput`.
 
-1. **Scaffolding do projeto** — `package.json`, `tsconfig.json`, `jest.config.ts`, instalar dependências (`express`, `uuid`, `@types/*`, `typescript`, `jest`, `ts-jest`, `supertest`, `@types/supertest`).
-2. **Model** — `src/models/todo.model.ts` com a interface `Todo`.
-3. **Repository** — `src/repositories/todo.repository.ts` com `Map<string, Todo>`.
-4. **Erro customizado** — `src/errors/not-found.error.ts`.
-5. **Service** — `src/services/todo.service.ts` usando o repository.
-6. **Controller** — `src/controllers/todo.controller.ts` com validação.
-7. **Routes** — `src/routes/todo.routes.ts`.
-8. **App** — `src/app.ts` (Express + middleware JSON + rotas).
-9. **Server** — `src/server.ts` (escuta na `PORT`).
-10. **Testes unitários** — `tests/unit/todo.service.spec.ts`, `tests/unit/todo.repository.spec.ts`.
-11. **Testes de integração** — `tests/integration/todo.routes.spec.ts` (supertest sobre `app`).
+2. **Service** (`src/services/todo.service.ts`):
+   - Em `create()`: inicializar `reminder` com `input.reminder ?? null`.
+   - Em `update()`: se `input.reminder !== undefined`, aplicar o valor (pode ser `null` ou string).
+
+3. **Controller** (`src/controllers/todo.controller.ts`):
+   - Em `create()`: extrair `reminder` do body; se presente e não `null`, validar como ISO 8601; se inválido, retornar 400 `{ error: "Reminder must be a valid ISO 8601 date string" }`.
+   - Em `update()`: mesma validação de `reminder`; aceitar `null` para remoção.
+   - Função auxiliar privada ou inline: `isValidIsoDate(value: string): boolean` → `!isNaN(new Date(value).getTime())`.
+
+4. **Testes unitários** (`tests/unit/todo.service.spec.ts`):
+   - Criar todo com reminder.
+   - Criar todo sem reminder (deve ser `null`).
+   - Atualizar reminder.
+   - Remover reminder (`null`).
+
+5. **Testes unitários** (`tests/unit/todo.repository.spec.ts`):
+   - Salvar e recuperar todo com reminder.
+
+6. **Testes de integração** (`tests/integration/todo.routes.spec.ts`):
+   - POST com reminder válido → 201 com reminder.
+   - POST sem reminder → 201 com reminder `null`.
+   - POST com reminder inválido → 400.
+   - PUT com reminder → 200 com reminder atualizado.
+   - PUT com `reminder: null` → 200 com reminder `null`.
+   - PUT com reminder inválido → 400.
+   - GET /:id → resposta contém reminder.
+   - GET / → cada item contém reminder.
+
+7. **Teste de aceitação** (`tests/qa_acceptance.spec.ts`):
+   - Verificar cenários correspondentes a cada AC.
 
 ### Frontend
 
-Nenhum trabalho de frontend.
+**None: no front-end changes.** O repositório não possui front-end; os requisitos explicitamente excluem interface de usuário.
 
-## Como executar
+## Como Rodar
 
-### Pré-requisitos
+| Comando | O que faz |
+|---|---|
+| `cd back-end && npm install` | Instala dependências |
+| `cd back-end && npm test` | Roda todos os testes (Jest) |
+| `cd back-end && npx tsc --noEmit` | Verifica tipos |
+| `cd back-end && npm run dev` | Inicia o servidor (ts-node) |
+| `cd back-end && npm run build && npm start` | Build + start em produção |
 
-- Node.js >= 18
-- npm
+## Variáveis de Ambiente
 
-### Variáveis de ambiente
+| Variável | Descrição | Default |
+|---|---|---|
+| `PORT` | Porta do servidor HTTP | `3000` |
 
-| Variável | Descrição | Padrão |
-|----------|-----------|--------|
-| `PORT`   | Porta do servidor HTTP | `3000` |
+## Como o Sistema Inicia
 
-### Comandos
-
-```bash
-cd back-end
-
-# Instalar dependências
-npm install
-
-# Iniciar o servidor
-npm start          # ou: npx ts-node src/server.ts
-
-# Iniciar em modo desenvolvimento (com reload)
-npm run dev        # opcional, se configurado com ts-node-dev/nodemon
-
-# Verificação de tipos
-npx tsc --noEmit
-
-# Executar testes
-npm test
-
-# Lint (se configurado)
-npm run lint
-```
-
-### Scripts do package.json
-
-```json
-{
-  "scripts": {
-    "build": "tsc",
-    "start": "node dist/server.js",
-    "dev": "ts-node src/server.ts",
-    "test": "jest --verbose",
-    "lint": "eslint src/ tests/"
-  }
-}
-```
+`npm start` executa `node dist/server.js`, que importa `app.ts` (Express configurado com JSON parser e rotas `/todos`), e escuta na porta `PORT`.

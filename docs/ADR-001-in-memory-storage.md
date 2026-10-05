@@ -1,20 +1,20 @@
-# ADR-001: Persistência em memória
+# ADR-001: Manter armazenamento em memória para o campo reminder
 
 ## Contexto
 
-Os requisitos pedem uma API CRUD de todos. O documento de produto declara explicitamente que banco de dados externo está **fora de escopo** e que persistência em memória é aceitável.
+O AC-9 exige que o campo `reminder` seja persistido e sobreviva ao reinício do servidor. No entanto, a aplicação atual usa armazenamento em memória (`Map`), sem banco de dados. Os requisitos do PM reconhecem explicitamente essa limitação (ambiguidade #1).
 
 ## Decisão
 
-Usar um `Map<string, Todo>` em memória no repository, sem banco de dados externo (PostgreSQL ou outro).
+Manter o armazenamento em memória. Não introduzir banco de dados nesta tarefa.
 
-## Alternativas consideradas
+## Alternativas Consideradas
 
-1. **PostgreSQL via `DATABASE_URL`** — padrão do stack Node.js + Express da Squad. Descartado porque os requisitos dizem explicitamente "banco de dados externo fora de escopo".
-2. **SQLite em arquivo** — leve, mas adiciona dependência desnecessária para o escopo pedido.
+1. **Adicionar PostgreSQL**: satisfaria AC-9 plenamente, mas mudaria a arquitetura significativamente e está fora do escopo solicitado.
+2. **Adicionar SQLite/arquivo JSON**: persistência simples, mas introduz dependência e complexidade não solicitadas.
+3. **Manter em memória**: consistente com o design atual; o campo `reminder` se comporta exatamente como os demais campos.
 
 ## Consequências
 
-- **Positivas**: setup zero, sem dependência de infra, testes rápidos sem container.
-- **Negativas**: dados são perdidos ao reiniciar o servidor; não escalável para produção.
-- A arquitetura usa o padrão Repository, então migrar para um banco real no futuro exige apenas trocar a implementação do repository.
+- O `reminder`, assim como todos os outros campos, se perde ao reiniciar o servidor. Isso é uma limitação preexistente, não introduzida por esta funcionalidade.
+- Se futuramente for adicionada persistência, o campo `reminder` já estará no modelo e será migrado naturalmente.

@@ -1,269 +1,140 @@
-# Contrato da API — API CRUD Todo
+# Contrato da API — Todo com Lembrete
 
-Base URL: `http://localhost:{PORT}` (padrão `PORT=3000`)
+Base URL: `http://localhost:3000`
 
-Todos os endpoints consomem e produzem `application/json`.
-
----
-
-## Modelo Todo (resposta)
+## Formato de Erro
 
 ```json
 {
-  "id": "string (UUID v4)",
-  "title": "string",
-  "completed": "boolean",
-  "createdAt": "string (ISO 8601)",
-  "updatedAt": "string (ISO 8601)"
+  "error": "Mensagem descritiva do erro"
 }
 ```
 
-## Formato de erro
+## Modelo `Todo` (resposta)
 
 ```json
 {
-  "error": "string (mensagem descritiva)"
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "Comprar pão",
+  "completed": false,
+  "reminder": "2026-10-10T14:30:00Z",
+  "createdAt": "2026-10-05T10:00:00.000Z",
+  "updatedAt": "2026-10-05T10:00:00.000Z"
 }
 ```
+
+O campo `reminder` é `string | null`. Quando não há lembrete, o valor é `null`.
 
 ---
 
 ## POST /todos
 
-Cria uma nova tarefa.
+Cria um novo todo.
 
-**Request body:**
+### Request
 
 ```json
 {
-  "title": "string (obrigatório, não vazio)"
+  "title": "Comprar pão",
+  "reminder": "2026-10-10T14:30:00Z"
 }
 ```
 
-| Campo   | Tipo   | Obrigatório | Regras |
-|---------|--------|-------------|--------|
-| `title` | string | Sim         | Não pode ser vazio nem apenas espaços |
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `title` | `string` | Sim | Título (não pode ser vazio) |
+| `reminder` | `string \| null` | Não | Data/hora ISO 8601 do lembrete. Se ausente ou `null`, o todo é criado sem lembrete. |
 
-**Respostas:**
+### Respostas
 
-| Status | Descrição | Body |
-|--------|-----------|------|
-| `201 Created` | Tarefa criada com sucesso | Objeto Todo (com `completed: false`, timestamps gerados) |
-| `400 Bad Request` | Campo `title` ausente ou vazio | `{ "error": "Title is required" }` |
-
-**Exemplo:**
-
-```
-POST /todos
-Content-Type: application/json
-
-{ "title": "Comprar leite" }
-```
-
-```
-HTTP/1.1 201 Created
-Content-Type: application/json
-
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "title": "Comprar leite",
-  "completed": false,
-  "createdAt": "2026-10-05T12:00:00.000Z",
-  "updatedAt": "2026-10-05T12:00:00.000Z"
-}
-```
-
-**AC cobertos:** AC-1, AC-2, AC-10
+| Status | Condição | Body |
+|---|---|---|
+| `201 Created` | Sucesso | Objeto `Todo` com `reminder` preenchido ou `null` |
+| `400 Bad Request` | `title` ausente ou vazio | `{ "error": "Title is required" }` |
+| `400 Bad Request` | `reminder` não é string ISO 8601 válida | `{ "error": "Reminder must be a valid ISO 8601 date string" }` |
 
 ---
 
 ## GET /todos
 
-Lista todas as tarefas.
+Lista todos os todos.
 
-**Request:** sem parâmetros.
+### Request
 
-**Respostas:**
+Sem parâmetros.
 
-| Status | Descrição | Body |
-|--------|-----------|------|
-| `200 OK` | Lista retornada com sucesso | Array de objetos Todo (pode ser vazio `[]`) |
+### Respostas
 
-**Exemplo:**
-
-```
-GET /todos
-```
-
-```
-HTTP/1.1 200 OK
-Content-Type: application/json
-
-[
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "title": "Comprar leite",
-    "completed": false,
-    "createdAt": "2026-10-05T12:00:00.000Z",
-    "updatedAt": "2026-10-05T12:00:00.000Z"
-  }
-]
-```
-
-**AC cobertos:** AC-3, AC-10
+| Status | Condição | Body |
+|---|---|---|
+| `200 OK` | Sucesso | Array de objetos `Todo` (cada um com campo `reminder`) |
 
 ---
 
 ## GET /todos/:id
 
-Busca uma tarefa pelo ID.
+Retorna um todo pelo ID.
 
-**Path parameters:**
+### Request
 
-| Parâmetro | Tipo   | Descrição |
-|-----------|--------|-----------|
-| `id`      | string | UUID da tarefa |
+| Parâmetro | Tipo | Local | Descrição |
+|---|---|---|---|
+| `id` | `string` | path | UUID do todo |
 
-**Respostas:**
+### Respostas
 
-| Status | Descrição | Body |
-|--------|-----------|------|
-| `200 OK` | Tarefa encontrada | Objeto Todo |
-| `404 Not Found` | Tarefa não existe | `{ "error": "Todo not found" }` |
-
-**Exemplo (sucesso):**
-
-```
-GET /todos/550e8400-e29b-41d4-a716-446655440000
-```
-
-```
-HTTP/1.1 200 OK
-Content-Type: application/json
-
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "title": "Comprar leite",
-  "completed": false,
-  "createdAt": "2026-10-05T12:00:00.000Z",
-  "updatedAt": "2026-10-05T12:00:00.000Z"
-}
-```
-
-**Exemplo (não encontrado):**
-
-```
-GET /todos/id-inexistente
-```
-
-```
-HTTP/1.1 404 Not Found
-Content-Type: application/json
-
-{ "error": "Todo not found" }
-```
-
-**AC cobertos:** AC-4, AC-5, AC-10
+| Status | Condição | Body |
+|---|---|---|
+| `200 OK` | Encontrado | Objeto `Todo` com campo `reminder` |
+| `404 Not Found` | Não encontrado | `{ "error": "Todo not found" }` |
 
 ---
 
 ## PUT /todos/:id
 
-Atualiza uma tarefa existente. Aceita atualização parcial dos campos `title` e `completed`.
+Atualiza um todo existente.
 
-**Path parameters:**
-
-| Parâmetro | Tipo   | Descrição |
-|-----------|--------|-----------|
-| `id`      | string | UUID da tarefa |
-
-**Request body:**
+### Request
 
 ```json
 {
-  "title": "string (opcional)",
-  "completed": "boolean (opcional)"
-}
-```
-
-| Campo       | Tipo    | Obrigatório | Regras |
-|-------------|---------|-------------|--------|
-| `title`     | string  | Não         | Se fornecido, não pode ser vazio |
-| `completed` | boolean | Não         | Se fornecido, deve ser boolean |
-
-Pelo menos um dos campos deve ser fornecido.
-
-**Respostas:**
-
-| Status | Descrição | Body |
-|--------|-----------|------|
-| `200 OK` | Tarefa atualizada com sucesso | Objeto Todo (com `updatedAt` atualizado) |
-| `404 Not Found` | Tarefa não existe | `{ "error": "Todo not found" }` |
-
-**Exemplo:**
-
-```
-PUT /todos/550e8400-e29b-41d4-a716-446655440000
-Content-Type: application/json
-
-{ "completed": true }
-```
-
-```
-HTTP/1.1 200 OK
-Content-Type: application/json
-
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "title": "Comprar leite",
+  "title": "Comprar pão integral",
   "completed": true,
-  "createdAt": "2026-10-05T12:00:00.000Z",
-  "updatedAt": "2026-10-05T12:05:00.000Z"
+  "reminder": "2026-10-11T09:00:00Z"
 }
 ```
 
-**AC cobertos:** AC-6, AC-7, AC-10
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `title` | `string` | Não | Novo título (não pode ser vazio se enviado) |
+| `completed` | `boolean` | Não | Novo status de conclusão |
+| `reminder` | `string \| null` | Não | Novo lembrete (ISO 8601), ou `null` para remover. Se ausente, o lembrete não é alterado. |
+
+### Respostas
+
+| Status | Condição | Body |
+|---|---|---|
+| `200 OK` | Sucesso | Objeto `Todo` atualizado com campo `reminder` |
+| `400 Bad Request` | `title` enviado mas vazio | `{ "error": "Title must be a non-empty string" }` |
+| `400 Bad Request` | `completed` não é boolean | `{ "error": "Completed must be a boolean" }` |
+| `400 Bad Request` | `reminder` não é string ISO 8601 válida (e não é `null`) | `{ "error": "Reminder must be a valid ISO 8601 date string" }` |
+| `404 Not Found` | Todo não encontrado | `{ "error": "Todo not found" }` |
 
 ---
 
 ## DELETE /todos/:id
 
-Remove uma tarefa.
+Remove um todo.
 
-**Path parameters:**
+### Request
 
-| Parâmetro | Tipo   | Descrição |
-|-----------|--------|-----------|
-| `id`      | string | UUID da tarefa |
+| Parâmetro | Tipo | Local | Descrição |
+|---|---|---|---|
+| `id` | `string` | path | UUID do todo |
 
-**Respostas:**
+### Respostas
 
-| Status | Descrição | Body |
-|--------|-----------|------|
-| `204 No Content` | Tarefa removida com sucesso | Sem corpo |
-| `404 Not Found` | Tarefa não existe | `{ "error": "Todo not found" }` |
-
-**Exemplo (sucesso):**
-
-```
-DELETE /todos/550e8400-e29b-41d4-a716-446655440000
-```
-
-```
-HTTP/1.1 204 No Content
-```
-
-**Exemplo (não encontrado):**
-
-```
-DELETE /todos/id-inexistente
-```
-
-```
-HTTP/1.1 404 Not Found
-Content-Type: application/json
-
-{ "error": "Todo not found" }
-```
-
-**AC cobertos:** AC-8, AC-9, AC-10
+| Status | Condição | Body |
+|---|---|---|
+| `204 No Content` | Sucesso | Sem body |
+| `404 Not Found` | Não encontrado | `{ "error": "Todo not found" }` |
