@@ -320,3 +320,55 @@ describe('Edge cases', () => {
     expect(res.body[0].title).toBe('Keep');
   });
 });
+
+describe('Reminder edge cases — QA additions', () => {
+  it('POST reminder as empty string returns 400', async () => {
+    const app = buildApp();
+    const res = await request(app).post('/todos').send({ title: 'Task', reminder: '' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Reminder must be a valid ISO 8601 date string');
+  });
+
+  it('PUT reminder as empty string returns 400', async () => {
+    const app = buildApp();
+    const created = await request(app).post('/todos').send({ title: 'Task' });
+    const res = await request(app).put(`/todos/${created.body.id}`).send({ reminder: '' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Reminder must be a valid ISO 8601 date string');
+  });
+
+  it('POST reminder as number returns 400', async () => {
+    const app = buildApp();
+    const res = await request(app).post('/todos').send({ title: 'Task', reminder: 123456789 });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Reminder must be a valid ISO 8601 date string');
+  });
+
+  it('PUT reminder as number returns 400', async () => {
+    const app = buildApp();
+    const created = await request(app).post('/todos').send({ title: 'Task' });
+    const res = await request(app).put(`/todos/${created.body.id}`).send({ reminder: 123456789 });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Reminder must be a valid ISO 8601 date string');
+  });
+
+  it('PUT without reminder field does not clear an existing reminder', async () => {
+    const app = buildApp();
+    const created = await request(app)
+      .post('/todos')
+      .send({ title: 'Task', reminder: '2026-10-10T14:30:00Z' });
+    const res = await request(app)
+      .put(`/todos/${created.body.id}`)
+      .send({ completed: true });
+    expect(res.status).toBe(200);
+    expect(res.body.reminder).toBe('2026-10-10T14:30:00Z');
+  });
+
+  it('GET /todos/:id returns reminder null when none was set', async () => {
+    const app = buildApp();
+    const created = await request(app).post('/todos').send({ title: 'No reminder' });
+    const res = await request(app).get(`/todos/${created.body.id}`);
+    expect(res.status).toBe(200);
+    expect(res.body.reminder).toBeNull();
+  });
+});
