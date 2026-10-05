@@ -1,6 +1,6 @@
 /**
- * QA acceptance tests — qa-engineer review iteration 1
- * Verifies each AC-1..AC-13 with explicit evidence.
+ * QA acceptance tests — qa-engineer review iteration 1 + reminder feature
+ * Verifies each AC-1..AC-9 (reminder) with explicit evidence.
  * Gaps exercised: Content-Type header (AC-10), UUID format (AC-1/AC-4/AC-6),
  * PUT empty body edge case, 204 has no body (AC-8).
  */
@@ -193,6 +193,96 @@ describe('AC-10: Content-Type application/json on all JSON-returning endpoints',
   });
 });
 
+describe('Reminder feature ACs', () => {
+  it('AC-R1: POST with reminder returns 201 with reminder field', async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .post('/todos')
+      .send({ title: 'With reminder', reminder: '2026-10-10T14:30:00Z' });
+    expect(res.status).toBe(201);
+    expect(res.body.reminder).toBe('2026-10-10T14:30:00Z');
+  });
+
+  it('AC-R2: POST without reminder returns 201 with reminder null', async () => {
+    const app = buildApp();
+    const res = await request(app).post('/todos').send({ title: 'No reminder' });
+    expect(res.status).toBe(201);
+    expect(res.body.reminder).toBeNull();
+  });
+
+  it('AC-R3: PUT with reminder updates the reminder field', async () => {
+    const app = buildApp();
+    const created = await request(app).post('/todos').send({ title: 'Task' });
+    const res = await request(app)
+      .put(`/todos/${created.body.id}`)
+      .send({ reminder: '2026-10-11T09:00:00Z' });
+    expect(res.status).toBe(200);
+    expect(res.body.reminder).toBe('2026-10-11T09:00:00Z');
+  });
+
+  it('AC-R4: PUT with reminder null removes the reminder', async () => {
+    const app = buildApp();
+    const created = await request(app)
+      .post('/todos')
+      .send({ title: 'Task', reminder: '2026-10-10T14:30:00Z' });
+    const res = await request(app)
+      .put(`/todos/${created.body.id}`)
+      .send({ reminder: null });
+    expect(res.status).toBe(200);
+    expect(res.body.reminder).toBeNull();
+  });
+
+  it('AC-R5: GET /todos/:id response contains reminder field', async () => {
+    const app = buildApp();
+    const created = await request(app)
+      .post('/todos')
+      .send({ title: 'Task', reminder: '2026-10-10T14:30:00Z' });
+    const res = await request(app).get(`/todos/${created.body.id}`);
+    expect(res.status).toBe(200);
+    expect(res.body.reminder).toBe('2026-10-10T14:30:00Z');
+  });
+
+  it('AC-R6: GET /todos — each item contains reminder field', async () => {
+    const app = buildApp();
+    await request(app).post('/todos').send({ title: 'A', reminder: '2026-10-10T14:30:00Z' });
+    await request(app).post('/todos').send({ title: 'B' });
+    const res = await request(app).get('/todos');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(2);
+    for (const item of res.body) {
+      expect('reminder' in item).toBe(true);
+    }
+  });
+
+  it('AC-R7: POST with invalid reminder returns 400', async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .post('/todos')
+      .send({ title: 'Task', reminder: 'not-a-date' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Reminder must be a valid ISO 8601 date string');
+  });
+
+  it('AC-R7: PUT with invalid reminder returns 400', async () => {
+    const app = buildApp();
+    const created = await request(app).post('/todos').send({ title: 'Task' });
+    const res = await request(app)
+      .put(`/todos/${created.body.id}`)
+      .send({ reminder: 'not-a-date' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Reminder must be a valid ISO 8601 date string');
+  });
+
+  it('AC-R8: past dates are accepted for reminder', async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .post('/todos')
+      .send({ title: 'Task', reminder: '2020-01-01T00:00:00Z' });
+    expect(res.status).toBe(201);
+    expect(res.body.reminder).toBe('2020-01-01T00:00:00Z');
+  });
+});
+
 describe('Edge cases', () => {
   it('PUT /todos/:id with empty body still returns 200 (no 400 enforcement for missing fields)', async () => {
     // The API contract says "at least one field must be provided" but no AC enforces a 400.
@@ -228,5 +318,57 @@ describe('Edge cases', () => {
     const res = await request(app).get('/todos');
     expect(res.body).toHaveLength(1);
     expect(res.body[0].title).toBe('Keep');
+  });
+});
+
+describe('Reminder edge cases — QA additions', () => {
+  it('POST reminder as empty string returns 400', async () => {
+    const app = buildApp();
+    const res = await request(app).post('/todos').send({ title: 'Task', reminder: '' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Reminder must be a valid ISO 8601 date string');
+  });
+
+  it('PUT reminder as empty string returns 400', async () => {
+    const app = buildApp();
+    const created = await request(app).post('/todos').send({ title: 'Task' });
+    const res = await request(app).put(`/todos/${created.body.id}`).send({ reminder: '' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Reminder must be a valid ISO 8601 date string');
+  });
+
+  it('POST reminder as number returns 400', async () => {
+    const app = buildApp();
+    const res = await request(app).post('/todos').send({ title: 'Task', reminder: 123456789 });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Reminder must be a valid ISO 8601 date string');
+  });
+
+  it('PUT reminder as number returns 400', async () => {
+    const app = buildApp();
+    const created = await request(app).post('/todos').send({ title: 'Task' });
+    const res = await request(app).put(`/todos/${created.body.id}`).send({ reminder: 123456789 });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Reminder must be a valid ISO 8601 date string');
+  });
+
+  it('PUT without reminder field does not clear an existing reminder', async () => {
+    const app = buildApp();
+    const created = await request(app)
+      .post('/todos')
+      .send({ title: 'Task', reminder: '2026-10-10T14:30:00Z' });
+    const res = await request(app)
+      .put(`/todos/${created.body.id}`)
+      .send({ completed: true });
+    expect(res.status).toBe(200);
+    expect(res.body.reminder).toBe('2026-10-10T14:30:00Z');
+  });
+
+  it('GET /todos/:id returns reminder null when none was set', async () => {
+    const app = buildApp();
+    const created = await request(app).post('/todos').send({ title: 'No reminder' });
+    const res = await request(app).get(`/todos/${created.body.id}`);
+    expect(res.status).toBe(200);
+    expect(res.body.reminder).toBeNull();
   });
 });

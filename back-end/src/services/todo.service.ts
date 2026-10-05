@@ -12,6 +12,7 @@ export class TodoService {
       id: uuidv4(),
       title: input.title,
       completed: false,
+      reminder: input.reminder ?? null,
       createdAt: now,
       updatedAt: now,
     };
@@ -39,6 +40,7 @@ export class TodoService {
       ...todo,
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.completed !== undefined ? { completed: input.completed } : {}),
+      ...(input.reminder !== undefined ? { reminder: input.reminder } : {}),
       updatedAt: new Date().toISOString(),
     };
     return this.repository.update(updated);

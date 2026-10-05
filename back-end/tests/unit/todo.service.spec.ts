@@ -23,6 +23,21 @@ describe('TodoService', () => {
       const todo = service.create({ title: 'Test' });
       expect(todo.createdAt).toBe(todo.updatedAt);
     });
+
+    it('creates a todo with reminder null when not provided', () => {
+      const todo = service.create({ title: 'No reminder' });
+      expect(todo.reminder).toBeNull();
+    });
+
+    it('creates a todo with reminder when provided', () => {
+      const todo = service.create({ title: 'With reminder', reminder: '2026-10-10T14:30:00Z' });
+      expect(todo.reminder).toBe('2026-10-10T14:30:00Z');
+    });
+
+    it('creates a todo with reminder null when explicitly null', () => {
+      const todo = service.create({ title: 'Null reminder', reminder: null });
+      expect(todo.reminder).toBeNull();
+    });
   });
 
   describe('listAll', () => {
@@ -78,6 +93,24 @@ describe('TodoService', () => {
 
     it('throws NotFoundError for unknown id', () => {
       expect(() => service.update('nonexistent', { completed: true })).toThrow(NotFoundError);
+    });
+
+    it('updates reminder to a new value', () => {
+      const created = service.create({ title: 'Task' });
+      const updated = service.update(created.id, { reminder: '2026-10-10T14:30:00Z' });
+      expect(updated.reminder).toBe('2026-10-10T14:30:00Z');
+    });
+
+    it('removes reminder when updated to null', () => {
+      const created = service.create({ title: 'Task', reminder: '2026-10-10T14:30:00Z' });
+      const updated = service.update(created.id, { reminder: null });
+      expect(updated.reminder).toBeNull();
+    });
+
+    it('does not change reminder when not provided in update', () => {
+      const created = service.create({ title: 'Task', reminder: '2026-10-10T14:30:00Z' });
+      const updated = service.update(created.id, { completed: true });
+      expect(updated.reminder).toBe('2026-10-10T14:30:00Z');
     });
   });
 

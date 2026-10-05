@@ -5,6 +5,7 @@ const makeTodo = (overrides: Partial<Todo> = {}): Todo => ({
   id: 'uuid-1',
   title: 'Test todo',
   completed: false,
+  reminder: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
   ...overrides,
@@ -55,5 +56,17 @@ describe('TodoRepository', () => {
 
   it('delete returns false when todo does not exist', () => {
     expect(repo.delete('nonexistent')).toBe(false);
+  });
+
+  it('saves and retrieves a todo with reminder', () => {
+    const todo = makeTodo({ reminder: '2026-10-10T14:30:00Z' });
+    repo.save(todo);
+    expect(repo.findById('uuid-1')?.reminder).toBe('2026-10-10T14:30:00Z');
+  });
+
+  it('saves and retrieves a todo with reminder null', () => {
+    const todo = makeTodo({ reminder: null });
+    repo.save(todo);
+    expect(repo.findById('uuid-1')?.reminder).toBeNull();
   });
 });

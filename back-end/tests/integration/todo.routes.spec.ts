@@ -62,6 +62,28 @@ describe('Todo Routes', () => {
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('Title is required');
     });
+
+    it('creates a todo with reminder and returns 201', async () => {
+      const res = await request(app)
+        .post('/todos')
+        .send({ title: 'Task', reminder: '2026-10-10T14:30:00Z' });
+      expect(res.status).toBe(201);
+      expect(res.body.reminder).toBe('2026-10-10T14:30:00Z');
+    });
+
+    it('creates a todo without reminder and reminder is null', async () => {
+      const res = await request(app).post('/todos').send({ title: 'No reminder' });
+      expect(res.status).toBe(201);
+      expect(res.body.reminder).toBeNull();
+    });
+
+    it('returns 400 when reminder is an invalid date string', async () => {
+      const res = await request(app)
+        .post('/todos')
+        .send({ title: 'Task', reminder: 'not-a-date' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Reminder must be a valid ISO 8601 date string');
+    });
   });
 
   describe('GET /todos', () => {
@@ -78,6 +100,17 @@ describe('Todo Routes', () => {
       expect(res.status).toBe(200);
       expect(res.body).toHaveLength(2);
     });
+
+    it('each todo contains reminder field', async () => {
+      await request(app).post('/todos').send({ title: 'A', reminder: '2026-10-10T14:30:00Z' });
+      await request(app).post('/todos').send({ title: 'B' });
+      const res = await request(app).get('/todos');
+      expect(res.status).toBe(200);
+      const withReminder = res.body.find((t: { title: string }) => t.title === 'A');
+      const withoutReminder = res.body.find((t: { title: string }) => t.title === 'B');
+      expect(withReminder.reminder).toBe('2026-10-10T14:30:00Z');
+      expect(withoutReminder.reminder).toBeNull();
+    });
   });
 
   describe('GET /todos/:id', () => {
@@ -86,6 +119,15 @@ describe('Todo Routes', () => {
       const res = await request(app).get(`/todos/${created.body.id}`);
       expect(res.status).toBe(200);
       expect(res.body).toEqual(created.body);
+    });
+
+    it('returns a todo with reminder field', async () => {
+      const created = await request(app)
+        .post('/todos')
+        .send({ title: 'With reminder', reminder: '2026-10-10T14:30:00Z' });
+      const res = await request(app).get(`/todos/${created.body.id}`);
+      expect(res.status).toBe(200);
+      expect(res.body.reminder).toBe('2026-10-10T14:30:00Z');
     });
 
     it('returns 404 for unknown id', async () => {
@@ -141,6 +183,35 @@ describe('Todo Routes', () => {
         .put(`/todos/${created.body.id}`)
         .send({ completed: 'yes' });
       expect(res.status).toBe(400);
+    });
+
+    it('updates reminder and returns 200', async () => {
+      const created = await request(app).post('/todos').send({ title: 'Task' });
+      const res = await request(app)
+        .put(`/todos/${created.body.id}`)
+        .send({ reminder: '2026-10-11T09:00:00Z' });
+      expect(res.status).toBe(200);
+      expect(res.body.reminder).toBe('2026-10-11T09:00:00Z');
+    });
+
+    it('removes reminder when set to null', async () => {
+      const created = await request(app)
+        .post('/todos')
+        .send({ title: 'Task', reminder: '2026-10-11T09:00:00Z' });
+      const res = await request(app)
+        .put(`/todos/${created.body.id}`)
+        .send({ reminder: null });
+      expect(res.status).toBe(200);
+      expect(res.body.reminder).toBeNull();
+    });
+
+    it('returns 400 when reminder is an invalid date string', async () => {
+      const created = await request(app).post('/todos').send({ title: 'Task' });
+      const res = await request(app)
+        .put(`/todos/${created.body.id}`)
+        .send({ reminder: 'bad-date' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Reminder must be a valid ISO 8601 date string');
     });
   });
 

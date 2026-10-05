@@ -2,16 +2,35 @@ import { Request, Response } from 'express';
 import { TodoService } from '../services/todo.service';
 import { NotFoundError } from '../errors/not-found.error';
 
+function isValidIsoDate(value: string): boolean {
+  return !isNaN(new Date(value).getTime());
+}
+
 export class TodoController {
   constructor(private readonly service: TodoService) {}
 
   create = (req: Request, res: Response): void => {
-    const { title } = req.body as { title?: unknown };
+    const body = req.body as { title?: unknown; reminder?: unknown };
+    const { title } = body;
     if (typeof title !== 'string' || title.trim() === '') {
       res.status(400).json({ error: 'Title is required' });
       return;
     }
-    const todo = this.service.create({ title: title.trim() });
+
+    const reminderRaw = body.reminder;
+    let reminder: string | null | undefined;
+    if (reminderRaw !== undefined) {
+      if (reminderRaw === null) {
+        reminder = null;
+      } else if (typeof reminderRaw === 'string' && isValidIsoDate(reminderRaw)) {
+        reminder = reminderRaw;
+      } else {
+        res.status(400).json({ error: 'Reminder must be a valid ISO 8601 date string' });
+        return;
+      }
+    }
+
+    const todo = this.service.create({ title: title.trim(), reminder });
     res.status(201).json(todo);
   };
 
@@ -34,8 +53,8 @@ export class TodoController {
   };
 
   update = (req: Request, res: Response): void => {
-    const body = req.body as { title?: unknown; completed?: unknown };
-    const input: { title?: string; completed?: boolean } = {};
+    const body = req.body as { title?: unknown; completed?: unknown; reminder?: unknown };
+    const input: { title?: string; completed?: boolean; reminder?: string | null } = {};
 
     if (body.title !== undefined) {
       if (typeof body.title !== 'string' || body.title.trim() === '') {
@@ -51,6 +70,17 @@ export class TodoController {
         return;
       }
       input.completed = body.completed;
+    }
+
+    if (body.reminder !== undefined) {
+      if (body.reminder === null) {
+        input.reminder = null;
+      } else if (typeof body.reminder === 'string' && isValidIsoDate(body.reminder)) {
+        input.reminder = body.reminder;
+      } else {
+        res.status(400).json({ error: 'Reminder must be a valid ISO 8601 date string' });
+        return;
+      }
     }
 
     try {
