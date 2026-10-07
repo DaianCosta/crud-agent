@@ -1,140 +1,65 @@
-# Contrato da API — Todo com Lembrete
+# Contrato da API — Endpoint de saúde com versão
 
-Base URL: `http://localhost:3000`
+## `GET /version`
 
-## Formato de Erro
+Retorna a versão da aplicação e a data do build.
 
-```json
-{
-  "error": "Mensagem descritiva do erro"
-}
-```
+### Parâmetros de query
 
-## Modelo `Todo` (resposta)
+| Parâmetro | Tipo   | Obrigatório | Valores aceitos | Descrição |
+|-----------|--------|-------------|-----------------|-----------|
+| `format`  | string | Não         | `short`         | Quando `short`, retorna só a versão em texto puro. Qualquer outro valor (ou ausência) retorna JSON completo. |
 
-```json
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "title": "Comprar pão",
-  "completed": false,
-  "reminder": "2026-10-10T14:30:00Z",
-  "createdAt": "2026-10-05T10:00:00.000Z",
-  "updatedAt": "2026-10-05T10:00:00.000Z"
-}
-```
+### Resposta — JSON (padrão)
 
-O campo `reminder` é `string | null`. Quando não há lembrete, o valor é `null`.
+**Condição**: `format` ausente ou diferente de `short`.
 
----
-
-## POST /todos
-
-Cria um novo todo.
-
-### Request
+- **Status**: `200 OK`
+- **Content-Type**: `application/json`
+- **Corpo**:
 
 ```json
 {
-  "title": "Comprar pão",
-  "reminder": "2026-10-10T14:30:00Z"
+  "version": "1.0.0",
+  "buildDate": "2026-10-07"
 }
 ```
 
-| Campo | Tipo | Obrigatório | Descrição |
-|---|---|---|---|
-| `title` | `string` | Sim | Título (não pode ser vazio) |
-| `reminder` | `string \| null` | Não | Data/hora ISO 8601 do lembrete. Se ausente ou `null`, o todo é criado sem lembrete. |
+| Campo       | Tipo   | Descrição                                            |
+|-------------|--------|------------------------------------------------------|
+| `version`   | string | Versão do `package.json`. Sempre não vazia.          |
+| `buildDate` | string | Data do build (ISO 8601, `YYYY-MM-DD`). Sempre não vazia. |
 
-### Respostas
+### Resposta — texto puro (format=short)
 
-| Status | Condição | Body |
-|---|---|---|
-| `201 Created` | Sucesso | Objeto `Todo` com `reminder` preenchido ou `null` |
-| `400 Bad Request` | `title` ausente ou vazio | `{ "error": "Title is required" }` |
-| `400 Bad Request` | `reminder` não é string ISO 8601 válida | `{ "error": "Reminder must be a valid ISO 8601 date string" }` |
+**Condição**: `format=short`.
 
----
+- **Status**: `200 OK`
+- **Content-Type**: `text/plain` (ou `text/plain; charset=utf-8`)
+- **Corpo**: somente o número da versão, sem quebra de linha, sem JSON.
 
-## GET /todos
+Exemplo: `1.0.0`
 
-Lista todos os todos.
+### Exemplos
 
-### Request
+```
+GET /version
+→ 200  application/json  {"version":"1.0.0","buildDate":"2026-10-07"}
 
-Sem parâmetros.
+GET /version?format=short
+→ 200  text/plain  1.0.0
 
-### Respostas
+GET /version?format=unknown
+→ 200  application/json  {"version":"1.0.0","buildDate":"2026-10-07"}
 
-| Status | Condição | Body |
-|---|---|---|
-| `200 OK` | Sucesso | Array de objetos `Todo` (cada um com campo `reminder`) |
-
----
-
-## GET /todos/:id
-
-Retorna um todo pelo ID.
-
-### Request
-
-| Parâmetro | Tipo | Local | Descrição |
-|---|---|---|---|
-| `id` | `string` | path | UUID do todo |
-
-### Respostas
-
-| Status | Condição | Body |
-|---|---|---|
-| `200 OK` | Encontrado | Objeto `Todo` com campo `reminder` |
-| `404 Not Found` | Não encontrado | `{ "error": "Todo not found" }` |
-
----
-
-## PUT /todos/:id
-
-Atualiza um todo existente.
-
-### Request
-
-```json
-{
-  "title": "Comprar pão integral",
-  "completed": true,
-  "reminder": "2026-10-11T09:00:00Z"
-}
+GET /version?format=
+→ 200  application/json  {"version":"1.0.0","buildDate":"2026-10-07"}
 ```
 
-| Campo | Tipo | Obrigatório | Descrição |
-|---|---|---|---|
-| `title` | `string` | Não | Novo título (não pode ser vazio se enviado) |
-| `completed` | `boolean` | Não | Novo status de conclusão |
-| `reminder` | `string \| null` | Não | Novo lembrete (ISO 8601), ou `null` para remover. Se ausente, o lembrete não é alterado. |
+### Erros
 
-### Respostas
+Este endpoint não produz erros de negócio. Em caso de erro interno, a aplicação retorna o tratamento padrão do Express:
 
-| Status | Condição | Body |
-|---|---|---|
-| `200 OK` | Sucesso | Objeto `Todo` atualizado com campo `reminder` |
-| `400 Bad Request` | `title` enviado mas vazio | `{ "error": "Title must be a non-empty string" }` |
-| `400 Bad Request` | `completed` não é boolean | `{ "error": "Completed must be a boolean" }` |
-| `400 Bad Request` | `reminder` não é string ISO 8601 válida (e não é `null`) | `{ "error": "Reminder must be a valid ISO 8601 date string" }` |
-| `404 Not Found` | Todo não encontrado | `{ "error": "Todo not found" }` |
-
----
-
-## DELETE /todos/:id
-
-Remove um todo.
-
-### Request
-
-| Parâmetro | Tipo | Local | Descrição |
-|---|---|---|---|
-| `id` | `string` | path | UUID do todo |
-
-### Respostas
-
-| Status | Condição | Body |
-|---|---|---|
-| `204 No Content` | Sucesso | Sem body |
-| `404 Not Found` | Não encontrado | `{ "error": "Todo not found" }` |
+- **Status**: `500 Internal Server Error`
+- **Content-Type**: `application/json`
+- **Corpo**: `{ "error": "Internal Server Error" }`

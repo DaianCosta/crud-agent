@@ -1,119 +1,101 @@
-# Arquitetura — Lembrete de Todo
+# Arquitetura — Endpoint de saúde com versão
 
-## Visão Geral
+## Visão geral
 
-Adicionar um campo opcional `reminder` (data/hora ISO 8601) ao modelo `Todo` existente, propagando-o por todas as camadas da aplicação: model → repository → service → controller → routes. A persistência continua em memória (Map), conforme o design atual.
+Adicionar o endpoint `GET /version` à API Express existente. É uma rota pura, sem estado, sem banco de dados,
+sem autenticação. Lê a versão do `package.json` e a data do build de uma variável de ambiente (`BUILD_DATE`).
 
-## Componentes Afetados
+## Componentes
 
-| Camada | Arquivo | Mudança |
-|---|---|---|
-| Model | `back-end/src/models/todo.model.ts` | Adicionar `reminder: string \| null` a `Todo`, `CreateTodoInput` e `UpdateTodoInput` |
-| Repository | `back-end/src/repositories/todo.repository.ts` | Nenhuma — o repositório já é genérico (salva/atualiza o objeto `Todo` inteiro) |
-| Service | `back-end/src/services/todo.service.ts` | Propagar `reminder` em `create()` e `update()` |
-| Controller | `back-end/src/controllers/todo.controller.ts` | Validar `reminder`: se presente, deve ser `null` ou string ISO 8601 válida; rejeitar com 400 caso contrário |
-| Routes | `back-end/src/routes/todo.routes.ts` | Nenhuma mudança — os endpoints já existem |
-| Testes | `back-end/tests/**` | Adicionar cenários para reminder em cada nível |
+### 1. Rota `version.routes.ts`
 
-## Fluxo Principal
+Arquivo: `back-end/src/routes/version.routes.ts`
+
+Registra `GET /version` no Express. Importa `versionController`.
+
+### 2. Controlador `version.controller.ts`
+
+Arquivo: `back-end/src/controllers/version.controller.ts`
+
+Contém o handler do endpoint. Lógica:
+
+1. Lê `version` do `package.json` (importado com `resolveJsonModule`).
+2. Lê `buildDate` de `process.env.BUILD_DATE` (fallback: data atual em ISO 8601, só o dia: `YYYY-MM-DD`).
+3. Se `req.query.format === 'short'`, responde `text/plain` com a versão apenas (sem quebra de linha).
+4. Caso contrário (inclusive `format=unknown`), responde JSON `{ version, buildDate }`.
+
+Não há camada de serviço nem repositório — o endpoint é simples demais para justificar essa indireção.
+
+### 3. Registro em `app.ts`
+
+Adicionar `import { versionRouter } from './routes/version.routes'` e `app.use(versionRouter)` (sem prefixo,
+a rota já é `/version`).
+
+## Fluxo principal
 
 ```
-Cliente → POST /todos { title, reminder? }
-       → Controller.create(): valida title, valida reminder (ISO 8601 ou ausente)
-       → Service.create(): monta Todo com reminder (ou null)
-       → Repository.save(): grava no Map
-       → Resposta 201 { id, title, completed, reminder, createdAt, updatedAt }
+Cliente  ──GET /version──▶  Express  ──▶  version.routes  ──▶  version.controller
+                                                                   ├─ lê package.json (version)
+                                                                   ├─ lê process.env.BUILD_DATE
+                                                                   └─ responde JSON ou text/plain
 ```
 
-```
-Cliente → PUT /todos/:id { reminder: "2026-10-10T14:30:00Z" }
-       → Controller.update(): valida reminder (ISO 8601, null, ou ausente)
-       → Service.update(): aplica reminder ao todo existente
-       → Repository.update(): grava no Map
-       → Resposta 200 { id, title, completed, reminder, createdAt, updatedAt }
-```
+## Mapeamento AC → componente
 
-## Validação de `reminder`
+| AC   | Componente(s)                      |
+|------|------------------------------------|
+| AC-1 | version.controller (res.json)      |
+| AC-2 | version.controller (campos version e buildDate) |
+| AC-3 | version.controller (import package.json) |
+| AC-4 | version.controller (res.type('text/plain')) |
+| AC-5 | version.controller (res.send sem \n) |
+| AC-6 | version.controller (else → JSON)   |
 
-- **Ausente / `undefined`**: campo não é alterado (em update) ou fica `null` (em create).
-- **`null`**: remove o lembrete (campo fica `null`).
-- **String ISO 8601 válida**: armazenada como recebida. Validação via `new Date(value)` — se resultar em `Invalid Date` ou `isNaN`, retorna 400.
-- **Qualquer outro tipo**: retorna 400.
-- Datas no passado são aceitas (AC-8).
+## Front-end
 
-## Mapeamento de Critérios de Aceitação
+Nenhum: não há alterações de front-end.
 
-| AC | Componente(s) |
-|---|---|
-| AC-1 | Controller.create + Service.create + Model |
-| AC-2 | Controller.create + Service.create (default `null`) |
-| AC-3 | Controller.update + Service.update |
-| AC-4 | Controller.update + Service.update (aceitar `null`) |
-| AC-5 | Controller.findById (já devolve o objeto inteiro) |
-| AC-6 | Controller.listAll (já devolve o array inteiro) |
-| AC-7 | Controller.create + Controller.update (validação) |
-| AC-8 | Controller (não rejeitar datas passadas) |
-| AC-9 | Repository (in-memory Map — limitação documentada) |
+## Plano de implementação
 
-## Plano de Implementação
+### Backend (back-end/)
 
-### Backend (`back-end/`)
-
-1. **Model** (`src/models/todo.model.ts`):
-   - Adicionar `reminder: string | null` à interface `Todo`.
-   - Adicionar `reminder?: string | null` a `CreateTodoInput` e `UpdateTodoInput`.
-
-2. **Service** (`src/services/todo.service.ts`):
-   - Em `create()`: inicializar `reminder` com `input.reminder ?? null`.
-   - Em `update()`: se `input.reminder !== undefined`, aplicar o valor (pode ser `null` ou string).
-
-3. **Controller** (`src/controllers/todo.controller.ts`):
-   - Em `create()`: extrair `reminder` do body; se presente e não `null`, validar como ISO 8601; se inválido, retornar 400 `{ error: "Reminder must be a valid ISO 8601 date string" }`.
-   - Em `update()`: mesma validação de `reminder`; aceitar `null` para remoção.
-   - Função auxiliar privada ou inline: `isValidIsoDate(value: string): boolean` → `!isNaN(new Date(value).getTime())`.
-
-4. **Testes unitários** (`tests/unit/todo.service.spec.ts`):
-   - Criar todo com reminder.
-   - Criar todo sem reminder (deve ser `null`).
-   - Atualizar reminder.
-   - Remover reminder (`null`).
-
-5. **Testes unitários** (`tests/unit/todo.repository.spec.ts`):
-   - Salvar e recuperar todo com reminder.
-
-6. **Testes de integração** (`tests/integration/todo.routes.spec.ts`):
-   - POST com reminder válido → 201 com reminder.
-   - POST sem reminder → 201 com reminder `null`.
-   - POST com reminder inválido → 400.
-   - PUT com reminder → 200 com reminder atualizado.
-   - PUT com `reminder: null` → 200 com reminder `null`.
-   - PUT com reminder inválido → 400.
-   - GET /:id → resposta contém reminder.
-   - GET / → cada item contém reminder.
-
-7. **Teste de aceitação** (`tests/qa_acceptance.spec.ts`):
-   - Verificar cenários correspondentes a cada AC.
+1. Criar `src/controllers/version.controller.ts` com o handler descrito acima.
+2. Criar `src/routes/version.routes.ts` registrando `GET /version`.
+3. Alterar `src/app.ts` para importar e montar `versionRouter`.
+4. Criar `tests/integration/version.routes.spec.ts` com testes para AC-1 a AC-6.
 
 ### Frontend
 
-**None: no front-end changes.** O repositório não possui front-end; os requisitos explicitamente excluem interface de usuário.
+Sem alterações.
 
-## Como Rodar
+## Como rodar
 
-| Comando | O que faz |
-|---|---|
-| `cd back-end && npm install` | Instala dependências |
-| `cd back-end && npm test` | Roda todos os testes (Jest) |
-| `cd back-end && npx tsc --noEmit` | Verifica tipos |
-| `cd back-end && npm run dev` | Inicia o servidor (ts-node) |
-| `cd back-end && npm run build && npm start` | Build + start em produção |
+### Testes
 
-## Variáveis de Ambiente
+```bash
+cd back-end
+npm test
+```
 
-| Variável | Descrição | Default |
-|---|---|---|
-| `PORT` | Porta do servidor HTTP | `3000` |
+### Verificação de tipos
 
-## Como o Sistema Inicia
+```bash
+cd back-end
+npx tsc --noEmit
+```
 
-`npm start` executa `node dist/server.js`, que importa `app.ts` (Express configurado com JSON parser e rotas `/todos`), e escuta na porta `PORT`.
+### Iniciar a aplicação
+
+```bash
+cd back-end
+npm run dev
+# ou em produção:
+npm run build && npm start
+```
+
+## Variáveis de ambiente
+
+| Variável     | Obrigatória | Padrão           | Descrição                        |
+|-------------|-------------|------------------|----------------------------------|
+| `PORT`      | Não         | `3000`           | Porta do servidor HTTP           |
+| `BUILD_DATE`| Não         | Data atual (ISO) | Data do build, definida no CI/CD |
